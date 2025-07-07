@@ -1,0 +1,25 @@
+.env
+backend/venv/
+# Ignore Python cache files
+backend/__pycache__/
+
+# Virtual Environment
+/venv/
+/backend/venv/
+
+# Environment variables
+.env
+*.env
+
+# Python cache
+__pycache__/
+*.pyc
+
+# IDE and OS files
+.idea/
+.vscode/
+*.DS_Store
+
+# Scraper output files (optional but good practice)
+*.csv
+*.json

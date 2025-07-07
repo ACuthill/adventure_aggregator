@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Adventure Aggregator</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f4f4f9; color: #333; margin: 0; padding: 2em; }
+        h1 { color: #444; text-align: center; }
+        #controls { display: flex; justify-content: center; align-items: center; gap: 15px; margin-bottom: 2em; flex-wrap: wrap; }
+        #controls input, #controls select, #controls button { padding: 10px; font-size: 1em; border-radius: 5px; border: 1px solid #ccc; }
+        #controls button { background-color: #007bff; color: white; cursor: pointer; border-color: #007bff; }
+        #adventures-container { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; }
+        .adventure-card { background: white; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); overflow: hidden; display: flex; flex-direction: column; }
+        .adventure-card img { width: 100%; height: 220px; object-fit: cover; }
+        .adventure-card-content { padding: 15px; flex-grow: 1; display: flex; flex-direction: column; }
+        .adventure-card h3 { margin-top: 0; font-size: 1.1em; }
+        .adventure-card a { text-decoration: none; color: #0056b3; }
+        .price { font-size: 1.3em; font-weight: bold; color: #28a745; margin-top: auto; }
+        #loader { text-align: center; font-size: 1.5em; display: none; }
+        #pagination { text-align: center; margin-top: 2em; }
+        #pagination button { padding: 10px 20px; font-size: 1em; cursor: pointer; margin: 0 5px; }
+        #pagination button:disabled { cursor: not-allowed; opacity: 0.5; }
+    </style>
+</head>
+<body>
+
+    <h1>Find Your Next Adventure!</h1>
+
+    <div id="controls">
+        <input type="text" id="search-location" placeholder="e.g., Peru, Alps, Thailand...">
+        <select id="sort-by">
+            <option value="price">Sort by Price</option>
+            <option value="departure_date">Sort by Date</option>
+            <option value="duration">Sort by Duration</option>
+        </select>
+        <select id="sort-order">
+            <option value="asc">Ascending</option>
+            <option value="desc">Descending</option>
+        </select>
+        <button id="search-button">Search</button>
+    </div>
+
+    <div id="loader">Loading adventures...</div>
+    <div id="adventures-container"></div>
+
+    <div id="pagination">
+        <button id="prev-button" disabled>Previous</button>
+        <span id="page-info">Page 1</span>
+        <button id="next-button">Next</button>
+    </div>
+
+    <script>
+        // --- CONFIGURATION ---
+        const API_BASE_URL = 'http://127.0.0.1:8000';
+        const ADVENTURES_PER_PAGE = 20;
+
+        // --- DOM ELEMENTS ---
+        const adventuresContainer = document.getElementById('adventures-container');
+        const loader = document.getElementById('loader');
+        const searchButton = document.getElementById('search-button');
+        const searchLocationInput = document.getElementById('search-location');
+        const sortBySelect = document.getElementById('sort-by');
+        const sortOrderSelect = document.getElementById('sort-order');
+        const prevButton = document.getElementById('prev-button');
+        const nextButton = document.getElementById('next-button');
+        const pageInfo = document.getElementById('page-info');
+
+        // --- STATE ---
+        let currentPage = 0;
+
+        // --- FUNCTIONS ---
+        async function fetchAndDisplayAdventures() {
+            loader.style.display = 'block';
+            adventuresContainer.innerHTML = '';
+            
+            // 1. Build the API URL from the control values
+            const location = searchLocationInput.value;
+            const sortBy = sortBySelect.value;
+            const order = sortOrderSelect.value;
+            const offset = currentPage * ADVENTURES_PER_PAGE;
+            
+            let apiUrl = `${API_BASE_URL}/adventures/?limit=${ADVENTURES_PER_PAGE}&offset=${offset}&sort_by=${sortBy}&order=${order}`;
+            if (location) {
+                apiUrl += `&location=${encodeURIComponent(location)}`;
+            }
+            
+            console.log("Fetching URL:", apiUrl);
+
+            try {
+                // 2. Fetch data from the API
+                const response = await fetch(apiUrl);
+                if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+                const adventures = await response.json();
+                
+                // 3. Display the data
+                displayAdventures(adventures);
+
+                // 4. Update pagination controls
+                nextButton.disabled = adventures.length < ADVENTURES_PER_PAGE;
+
+            } catch (error) {
+                console.error("Failed to fetch adventures:", error);
+                adventuresContainer.innerHTML = '<p>Sorry, could not load adventures. Check the console for more details.</p>';
+            } finally {
+                loader.style.display = 'none';
+                updatePaginationInfo();
+            }
+        }
+
+        function displayAdventures(adventures) {
+            if (adventures.length === 0) {
+                adventuresContainer.innerHTML = '<p>No adventures found for your search criteria.</p>';
+                return;
+            }
+
+            for (const adventure of adventures) {
+                const card = document.createElement('div');
+                card.className = 'adventure-card';
+
+                const formattedPrice = new Intl.NumberFormat('en-GB', { style: 'currency', currency: adventure.currency || 'GBP' }).format(adventure.price);
+                const formattedDate = new Date(adventure.departure_date).toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' });
+
+                card.innerHTML = `
+                    <img src="${adventure.image_url || 'https://via.placeholder.com/400x200.png?text=No+Image'}" alt="${adventure.trip_name}">
+                    <div class="adventure-card-content">
+                        <h3><a href="${adventure.url}" target="_blank" title="${adventure.trip_name}">${adventure.trip_name}</a></h3>
+                        <p><strong>Provider:</strong> ${adventure.provider_name}</p>
+                        <p><strong>Location:</strong> ${adventure.location}</p>
+                        <p><strong>Date:</strong> ${formattedDate}</p>
+                        <p class="price">${formattedPrice}</p>
+                    </div>
+                `;
+                adventuresContainer.appendChild(card);
+            }
+        }
+
+        function updatePaginationInfo() {
+            pageInfo.textContent = `Page ${currentPage + 1}`;
+            prevButton.disabled = currentPage === 0;
+        }
+        
+        // --- EVENT LISTENERS ---
+        searchButton.addEventListener('click', () => {
+            currentPage = 0; // Reset to first page on a new search
+            fetchAndDisplayAdventures();
+        });
+
+        nextButton.addEventListener('click', () => {
+            currentPage++;
+            fetchAndDisplayAdventures();
+        });
+
+        prevButton.addEventListener('click', () => {
+            if (currentPage > 0) {
+                currentPage--;
+                fetchAndDisplayAdventures();
+            }
+        });
+
+        // --- INITIAL LOAD ---
+        document.addEventListener('DOMContentLoaded', fetchAndDisplayAdventures);
+    </script>
+
+</body>
+</html>
